@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+
+# Entorno y secretos
+.env
+.env.local
+.env.*.local
+
+# Vercel (opcional: para no subir config local)
+.vercel
+
+# Sistema y editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
