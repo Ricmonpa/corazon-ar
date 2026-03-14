@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corazón Anatómico ULTRA - AR Gestual (Procedural)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #030005; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #webcam-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; opacity: 0.8; }
+        #webcam-video, #webcam-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        
+        #loading-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a000d 0%, #000000 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50;
+        }
+
+        .dna-loader {
+            width: 80px; height: 80px; border: 3px solid transparent;
+            border-top: 3px solid #ff0055; border-bottom: 3px solid #00f3ff;
+            border-radius: 50%; animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } 100% { transform: rotate(360deg) scale(1); } }
+        
+        .hologram-text { text-shadow: 0 0 10px rgba(255, 0, 85, 0.8), 0 0 20px rgba(255, 0, 85, 0.5); }
+        .data-stream { font-family: monospace; font-size: 0.7rem; color: #ff0055; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+    <div id="webcam-container">
+        <video id="webcam-video" autoplay playsinline></video>
+        <canvas id="webcam-canvas"></canvas>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer" class="p-6 md:p-10 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+            <div>
+                <h1 class="text-4xl md:text-5xl font-black text-[#ff0055] tracking-tighter hologram-text uppercase">CardioVisión <span class="text-white font-light text-2xl">ULTRA</span></h1>
+                <div class="mt-4 bg-black/60 p-5 rounded-xl border border-[#ff0055]/40 backdrop-blur-lg shadow-[0_0_30px_rgba(255,0,85,0.15)] max-w-sm">
+                    <div class="flex items-center gap-2 mb-3 border-b border-[#ff0055]/30 pb-2">
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-xs text-green-400 font-bold tracking-widest">MODO PROCEDURAL</span>
+                    </div>
+                    <p class="text-gray-300 text-sm leading-relaxed">
+                        ✋ <b>Rotar:</b> Mueve la mano abierta.<br>
+                        🤏 <b>Zoom/Entrar:</b> Pellizca y separa los dedos.<br>
+                        <span class="text-[#ff0055] text-xs mt-2 block italic">*Observa el nodo sinusal brillando en amarillo dentro de la aurícula derecha.</span>
+                    </p>
+                    <p class="mt-3 text-xs text-gray-500"><a href="index.html" class="text-[#00f3ff] hover:underline">Corazón real (GLB) →</a></p>
+                </div>
+            </div>
+            
+            <!-- HUD lateral de ciencia ficción -->
+            <div class="hidden md:block text-right data-stream">
+                <p>SYS.BPM: <span id="bpm-display">72</span></p>
+                <p>AORTA.PRESS: 120/80</p>
+                <p>V.LEFT.VOL: 140mL</p>
+                <p>AI.TRACKING: ACTIVE</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading-screen">
+        <div class="dna-loader mb-8"></div>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-widest hologram-text uppercase">Generando Tejido</h2>
+        <p class="text-pink-300 text-center max-w-md text-sm font-mono opacity-70" id="loading-sub">
+            Sintetizando polígonos ventriculares...<br>Calculando curvas aórticas...<br>Iniciando Motor AR...
+        </p>
+    </div>
+
+    <script>
+        window.onload = function () {
+            // ==========================================
+            // 1. SETUP THREE.JS AVANZADO
+            // ==========================================
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+
+            const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 100;
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.toneMapping = THREE.AdditiveToneMapping;
+            container.appendChild(renderer.domElement);
+
+            // ==========================================
+            // 2. MATERIALES HOLOGRÁFICOS ULTRA-REALISTAS
+            // ==========================================
+            const colorMuscle = 0xff0044;
+            const colorVessels = 0xff0066;
+            const colorVeins = 0x0088ff; // Azul para venas pulmonares / Cava
+            const colorElec = 0xffea00;  // Amarillo para electricidad
+
+            // Material base oscuro para dar volumen
+            const matFill = new THREE.MeshBasicMaterial({ color: 0x110011, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+            
+            // Wireframe brillante
+            const matWire = new THREE.LineBasicMaterial({ color: colorMuscle, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending });
+            const matWireBlue = new THREE.LineBasicMaterial({ color: colorVeins, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending });
+            
+            // Puntos nodales
+            const matPoints = new THREE.PointsMaterial({ color: colorMuscle, size: 0.4, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+            const matPointsBlue = new THREE.PointsMaterial({ color: colorVeins, size: 0.4, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+
+            // ==========================================
+            // 3. ANATOMÍA PROCEDURAL (El Código Mágico)
+            // ==========================================
+            const heartGroup = new THREE.Group();
+            
+            function createHolographicPart(geometry, type = 'artery') {
+                geometry.computeVertexNormals();
+                const group = new THREE.Group();
+                group.add(new THREE.Mesh(geometry, matFill));
+                
+                const wire = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), type === 'vein' ? matWireBlue : matWire);
+                group.add(wire);
+                
+                const points = new THREE.Points(geometry, type === 'vein' ? matPointsBlue : matPoints);
+                group.add(points);
+                return group;
+            }
+
+            // A. MASA VENTRICULAR (Corazón principal deformado matemáticamente)
+            const ventGeo = new THREE.SphereGeometry(12, 64, 64);
+            const posAttr = ventGeo.attributes.position;
+            
+            // Algoritmo de deformación anatómica
+            for (let i = 0; i < posAttr.count; i++) {
+                let x = posAttr.getX(i); let y = posAttr.getY(i); let z = posAttr.getZ(i);
+                
+                // 1. Estirar hacia el ápice (abajo, izquierda, adelante)
+                if (y < 0) {
+                    const taper = 1 + (y * 0.05); 
+                    x *= taper; z *= taper;
+                    x += y * 0.3; // Tirar hacia la izquierda (derecha en 3D)
+                    z -= y * 0.1; // Tirar hacia adelante
+                    y *= 1.4;     // Alargar ventrículos
+                } else {
+                    // 2. Aplanar y ensanchar la base (arriba)
+                    y *= 0.6;
+                    x *= 1.1;
+                }
+
+                // 3. Surco interventricular (La división entre VI y VD)
+                let angle = Math.atan2(x, z);
+                if (angle > 0.3 && angle < 1.2 && y < 2) {
+                    const depth = Math.sin((angle - 0.3) * Math.PI / 0.9);
+                    x -= Math.sin(angle) * depth * 1.5;
+                    z -= Math.cos(angle) * depth * 1.5;
+                }
+
+                posAttr.setXYZ(i, x, y, z);
+            }
+            const ventricles = createHolographicPart(ventGeo);
+            heartGroup.add(ventricles);
+
+            // B. AURÍCULAS (Atriums) - Textura más rugosa (Noise simulado)
+            const atriumRGeo = new THREE.SphereGeometry(5, 32, 32);
+            for(let i=0; i<atriumRGeo.attributes.position.count; i++) {
+                let y = atriumRGeo.attributes.position.getY(i);
+                atriumRGeo.attributes.position.setY(i, y + Math.sin(y*2)*0.5); // Arrugas
+            }
+            const atriumR = createHolographicPart(atriumRGeo, 'vein');
+            atriumR.position.set(-6, 5, 2);
+            heartGroup.add(atriumR);
+
+            const atriumLGeo = new THREE.SphereGeometry(4.5, 32, 32);
+            const atriumL = createHolographicPart(atriumLGeo);
+            atriumL.position.set(6, 6, -4);
+            heartGroup.add(atriumL);
+
+            // C. LOS GRANDES VASOS (Tramos con curvas de Bézier/CatmullRom)
+            // C.1 Arco Aórtico (Sale del centro, sube, se arquea hacia atrás e izquierda)
+            const aortaPath = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(1, 4, -1),   // Raíz
+                new THREE.Vector3(2, 10, -1),  // Ascendente
+                new THREE.Vector3(-1, 14, -3), // Arco superior
+                new THREE.Vector3(-4, 9, -5),  // Descendente
+                new THREE.Vector3(-4, 0, -5)   // Baja por detrás
+            ]);
+            const aortaGeo = new THREE.TubeGeometry(aortaPath, 64, 3, 16, false);
+            heartGroup.add(createHolographicPart(aortaGeo));
+
+            // C.2 Tronco Pulmonar (Cruza POR DELANTE de la aorta)
+            const pulmoPath = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-2, 4, 3),   // Raíz (Ventrículo derecho)
+                new THREE.Vector3(-3, 9, 2),   // Tronco principal
+                new THREE.Vector3(-6, 11, 0)   // Rama izquierda
+            ]);
+            const pulmoGeo = new THREE.TubeGeometry(pulmoPath, 32, 2.5, 16, false);
+            heartGroup.add(createHolographicPart(pulmoGeo, 'vein'));
+
+            // C.3 Vena Cava Superior e Inferior
+            const cavaPath = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-8, -4, -1), // Inferior
+                new THREE.Vector3(-7, 5, 0),   // Entra a Aurícula Der.
+                new THREE.Vector3(-7, 14, -1)  // Superior
+            ]);
+            const cavaGeo = new THREE.TubeGeometry(cavaPath, 32, 2.2, 16, false);
+            heartGroup.add(createHolographicPart(cavaGeo, 'vein'));
+
+            // D. RED CORONARIA (Generación fractal sobre la superficie)
+            // Creamos ramas finas que simulan la arteria descendente anterior (LAD)
+            const corGeo = new THREE.BufferGeometry();
+            const corVerts = [];
+            // Simulación simple de venas en el surco
+            for(let i=0; i<20; i++) {
+                let y = 3 - i * 0.8;
+                let x = 3 - i * 0.2 + Math.sin(i)*0.5;
+                let z = 11 - i * 0.4;
+                corVerts.push(x, y, z);
+            }
+            corGeo.setAttribute('position', new THREE.Float32BufferAttribute(corVerts, 3));
+            const coronary = new THREE.Line(corGeo, new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2, transparent: true, opacity: 0.8}));
+            heartGroup.add(coronary);
+
+            // E. SISTEMA DE CONDUCCIÓN ELÉCTRICO (El núcleo brillante)
+            const elecGroup = new THREE.Group();
+            
+            // Nodo Sinusal (SA) - Marcapasos natural
+            const saNodeGeo = new THREE.SphereGeometry(0.8, 16, 16);
+            const saMat = new THREE.MeshBasicMaterial({ color: colorElec, blending: THREE.AdditiveBlending, transparent: true });
+            const saNode = new THREE.Mesh(saNodeGeo, saMat);
+            saNode.position.set(-7, 8, -1); // En la aurícula derecha
+            elecGroup.add(saNode);
+
+            // Haz de His y Fibras (Líneas internas)
+            const hisGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-7, 8, -1), // SA
+                new THREE.Vector3(-2, 3, 0),  // AV node
+                new THREE.Vector3(0, -5, 2),  // Rama Izq
+                new THREE.Vector3(-2, 3, 0),  // AV node
+                new THREE.Vector3(-4, -6, 5)  // Rama Der
+            ]);
+            const hisLine = new THREE.Line(hisGeo, new THREE.LineBasicMaterial({color: colorElec, transparent: true, opacity: 0.5}));
+            elecGroup.add(hisLine);
+            
+            heartGroup.add(elecGroup);
+
+            // Ajustar posición inicial
+            heartGroup.rotation.y = -Math.PI / 4; // Mostrar el frente angulado
+            scene.add(heartGroup);
+
+            // ==========================================
+            // 4. ANIMACIÓN BIOMECÁNICA (LATIDO REALISTA)
+            // ==========================================
+            let targetRotationX = 0; let targetRotationY = -Math.PI/4; let targetScale = 1.0;
+            const clock = new THREE.Clock();
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const time = clock.getElapsedTime();
+
+                // Fisiología del latido (Sístole y Diástole)
+                // Usamos una función exponencial matemática para simular la contracción rápida y relajación lenta
+                const bpm = 75; // Latidos por minuto
+                const bps = bpm / 60; // Latidos por segundo
+                const phase = (time * bps) % 1; 
+                
+                // Contracción ventricular (ocurre rápido alrededor del 20% del ciclo)
+                const systole = Math.exp(-Math.pow(phase - 0.2, 2) * 80);
+                
+                // Brillo eléctrico (ocurre justo ANTES de la contracción)
+                const elecSpike = Math.exp(-Math.pow(phase - 0.1, 2) * 200);
+                saNode.scale.set(1 + elecSpike*2, 1 + elecSpike*2, 1 + elecSpike*2);
+                saMat.opacity = 0.2 + elecSpike * 0.8;
+                hisLine.material.opacity = 0.1 + elecSpike * 0.9;
+
+                // Suavizado de movimiento de la mano
+                heartGroup.rotation.y += (targetRotationY - heartGroup.rotation.y) * 0.1;
+                heartGroup.rotation.x += (targetRotationX - heartGroup.rotation.x) * 0.1;
+
+                // Deformación del latido (En sístole, el corazón se hace un poco más estrecho pero no se achica uniformemente, se retuerce)
+                const handScale = targetScale;
+                // Escala X y Z se encogen (contracción), Y se mantiene casi igual
+                heartGroup.scale.set(
+                    handScale * (1 - systole * 0.08), 
+                    handScale * (1 + systole * 0.02), 
+                    handScale * (1 - systole * 0.08)
+                );
+                
+                // Retorcimiento (Wringing effect) natural del miocardio
+                ventricles.rotation.y = systole * 0.05;
+
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // ==========================================
+            // 5. INTELIGENCIA ARTIFICIAL (MEDIAPIPE)
+            // ==========================================
+            const videoElement = document.getElementById('webcam-video');
+            const canvasElement = document.getElementById('webcam-canvas');
+            const canvasCtx = canvasElement.getContext('2d');
+            const loadingScreen = document.getElementById('loading-screen');
+
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+
+            hands.setOptions({
+                maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7
+            });
+
+            hands.onResults((results) => {
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // Esqueleto holográfico en la UI
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: 'rgba(0, 243, 255, 0.4)', lineWidth: 2});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#00f3ff', lineWidth: 1, radius: 2});
+
+                    // Cinemática Inversa para la Rotación
+                    const handCenterX = landmarks[9].x; const handCenterY = landmarks[9].y; 
+                    targetRotationY = (handCenterX - 0.5) * Math.PI * 4; 
+                    targetRotationX = (handCenterY - 0.5) * Math.PI * 2;
+
+                    // Zoom / Pinch
+                    const thumbTip = landmarks[4]; const indexTip = landmarks[8];
+                    const distance = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+                    
+                    let mappedScale = distance * 15; 
+                    targetScale = Math.max(0.6, Math.min(8.0, mappedScale));
+                }
+                canvasCtx.restore();
+            });
+
+            const cameraUtils = new Camera(videoElement, {
+                onFrame: async () => {
+                    if (canvasElement.width !== videoElement.clientWidth) {
+                        canvasElement.width = videoElement.clientWidth;
+                        canvasElement.height = videoElement.clientHeight;
+                    }
+                    await hands.send({image: videoElement});
+                },
+                width: 1280, height: 720
+            });
+
+            cameraUtils.start().then(() => {
+                loadingScreen.style.opacity = '0';
+                setTimeout(() => loadingScreen.style.display = 'none', 800);
+            }).catch((err) => {
+                console.error(err);
+                document.getElementById('loading-sub').innerHTML = "<span class='text-red-500 font-bold'>ERROR CRÍTICO:</span><br>Acceso a biosensores ópticos (cámara) denegado.<br>Por favor otorga permisos para inicializar.";
+                document.querySelector('.dna-loader').style.display = 'none';
+            });
+        };
+    </script>
+</body>
+</html>
