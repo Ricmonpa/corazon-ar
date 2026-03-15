@@ -127,6 +127,44 @@
         let selectedMesh = null;
         let partLabelEl, raycaster, mouseNDC;
         const clock = new THREE.Clock();
+        const BEAT_PERIOD = 0.8;
+        let audioCtx = null;
+        let lastBeatPhase = 0;
+
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playLub() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.06);
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playDub() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(45, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.05);
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.06);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.08);
+        }
 
         function getMaterials(mesh) {
             return mesh.material ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) : [];
@@ -325,7 +363,11 @@
             function tryHideLoading() {
                 if (!cameraReady || !modelReady) return;
                 loadingScreen.style.opacity = '0';
-                setTimeout(() => { loadingScreen.style.display = 'none'; }, 800);
+                setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                    initAudio();
+                    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                }, 800);
             }
 
             cameraUtils.start().then(() => {
@@ -349,8 +391,13 @@
                 if (heartGroup) {
                     heartGroup.rotation.y += (targetRotationY - heartGroup.rotation.y) * 0.1;
                     heartGroup.rotation.x += (targetRotationX - heartGroup.rotation.x) * 0.1;
-                    const pulse = 0.95 + 0.05 * Math.sin(time * 2 * Math.PI / 0.8);
+                    const pulse = 0.95 + 0.05 * Math.sin(time * 2 * Math.PI / BEAT_PERIOD);
                     heartGroup.scale.setScalar(targetScale * pulse);
+
+                    const phase = (time / BEAT_PERIOD) % 1;
+                    if (phase < lastBeatPhase) playLub();
+                    else if (phase >= 0.18 && lastBeatPhase < 0.18) playDub();
+                    lastBeatPhase = phase;
 
                     if (heartMeshes.length && lastPointerNDC) {
                         mouseNDC.set(lastPointerNDC.x, lastPointerNDC.y);
