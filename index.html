@@ -243,23 +243,26 @@
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.z = 100;
 
-            // Luces para que los materiales PBR del GLB se vean (sin esto todo se ve negro)
-            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            // Luces para aspecto claro, luminoso y orgánico (como referencia)
+            const ambient = new THREE.AmbientLight(0xfff0ee, 0.9);
             scene.add(ambient);
-            const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-            mainLight.position.set(50, 80, 50);
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.6);
+            mainLight.position.set(50, 90, 60);
             mainLight.castShadow = false;
             scene.add(mainLight);
-            const fillLight = new THREE.DirectionalLight(0xffeedd, 0.4);
-            fillLight.position.set(-30, 20, -30);
+            const fillLight = new THREE.DirectionalLight(0xffddcc, 0.55);
+            fillLight.position.set(-40, 30, -20);
             scene.add(fillLight);
+            const topLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            topLight.position.set(0, 100, 20);
+            scene.add(topLight);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.physicallyCorrectLights = true;
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1;
+            renderer.toneMappingExposure = 1.35;
             container.appendChild(renderer.domElement);
 
             raycaster = new THREE.Raycaster();
