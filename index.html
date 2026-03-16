@@ -183,22 +183,7 @@
         }
 
         function setHighlight(mesh) {
-            heartMeshes.forEach(m => {
-                const orig = meshOriginalState.get(m);
-                if (!orig) return;
-                const mats = getMaterials(m);
-                mats.forEach((mat, i) => {
-                    const o = orig[i] || orig[0];
-                    if (!o) return;
-                    if (m === mesh) {
-                        if (mat.emissive) mat.emissive.setHex(HIGHLIGHT_EMISSIVE);
-                        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 1;
-                    } else {
-                        mat.transparent = true;
-                        mat.opacity = 0.4;
-                    }
-                });
-            });
+            // Sin cambiar color ni textura del corazón; solo etiqueta
             selectedMesh = mesh;
             if (partLabelEl && mesh && MESH_LABELS[mesh.name]) {
                 partLabelEl.textContent = MESH_LABELS[mesh.name];
